@@ -1,3 +1,13 @@
+# Idea
+
+*.properties
+build.xml
+*.iml
+proguard-project.txt
+.idea/
+gen/
+out/
+
 #################
 ## Eclipse
 #################

@@ -1,23 +1,32 @@
 package dk.appdo.calendarx.view;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.res.TypedArray;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Rect;
+import android.preference.PreferenceManager;
+import android.text.format.DateUtils;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.BaseAdapter;
-import android.widget.FrameLayout;
-import android.widget.ListView;
+import android.widget.*;
 import dk.appdo.calendarx.R;
 
 import java.text.DateFormat;
 import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Locale;
 
 public class CalendarView extends FrameLayout {
+
+	public interface OnFocusMonthChangeListener {
+		void onFocusMonthChanged(long newTimeInMillis);
+	}
 
 	private static final String LOG_TAG = "CalendarView";
 
@@ -36,7 +45,27 @@ public class CalendarView extends FrameLayout {
 	 */
 	private static final String DATE_FORMAT = "dd/MM/yyyy";
 
+	private static final int DEFAULT_DAYS_PER_WEEK = 7;
+
+	private static final int DEFAULT_SHOWN_ROWS_COUNT = 6;
+
+	private static final int DEFAULT_FIRST_DAY_OF_WEEK = Calendar.MONDAY;
+
+	private static final long MILLIS_IN_DAY = 24 * 60 * 60 * 1000;
+
+	private static final long MILLIS_IN_WEEK = MILLIS_IN_DAY * 7;
+
+	private static final int GOTO_SCROLL_DURATION = 1000;
+
+	private static final boolean DEFAULT_SHOW_WEEK_NUMBERS = false;
+
+	private Paint mDatePaint;
+
+	private Rect mTempRect;
+
 	private final Context mContext;
+
+	private OnFocusMonthChangeListener mOnFocusMonthChangeListener;
 
 	private final int mDateTextSize;
 
@@ -48,7 +77,7 @@ public class CalendarView extends FrameLayout {
 
 	private Calendar mFirstDayOfMonth;
 
-	private DateFormat mDateFormat;
+	private DateFormat mDateFormat = new SimpleDateFormat(DATE_FORMAT);
 
 	private Locale mCurrentLocale;
 
@@ -57,6 +86,28 @@ public class CalendarView extends FrameLayout {
 	private final ViewGroup mHeader;
 
 	private CalendarAdapter mAdapter;
+
+	private boolean mShowWeekNumber = DEFAULT_SHOW_WEEK_NUMBERS;
+
+	private int mDaysPerWeek = DEFAULT_DAYS_PER_WEEK;
+
+	private int mCurrentMonthDisplayed;
+
+	private int mSelectedWeek;
+
+	private int mFocusedMonth;
+
+	private int mListCount;
+
+	private String[] mDayLabels;
+
+	private int mFirstDayOfWeek = DEFAULT_FIRST_DAY_OF_WEEK;
+
+	private int mDaysPerRow = DEFAULT_DAYS_PER_WEEK;
+
+	private int mRows;
+
+	private int mRowHeight;
 
 	public CalendarView(Context context) {
 		this(context, null);
@@ -71,15 +122,22 @@ public class CalendarView extends FrameLayout {
 		mContext = context;
 
 		setCurrentLocale(Locale.getDefault());
+		parseDate(DEFAULT_MAX_DATE, mMaxDate);
+		parseDate(DEFAULT_MIN_DATE, mMinDate);
+
+		SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
 
 		TypedArray t = context.obtainStyledAttributes(android.R.style.TextAppearance_Small, new int[]{android.R.attr.textSize});
 
 		mDateTextSize = t.getDimensionPixelSize(0, 1);
 
-		t.recycle();
+		mFirstDayOfWeek = preferences.getInt("firstDayOfWeek", DEFAULT_DAYS_PER_WEEK);
 
-		parseDate(DEFAULT_MAX_DATE, mMaxDate);
-		parseDate(DEFAULT_MIN_DATE, mMinDate);
+		mRows = DEFAULT_SHOWN_ROWS_COUNT;
+
+		mListCount = getWeeksSinceMinDate(mMaxDate);
+
+		t.recycle();
 
 		LayoutInflater inflater = (LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 		View content = inflater.inflate(R.layout.calendar_view, null, false);
@@ -91,17 +149,98 @@ public class CalendarView extends FrameLayout {
 
 		setUpHeader();
 		setUpListView();
+
+		setUpPaints();
+	}
+
+	private void setUpPaints() {
+		mDatePaint = new Paint();
+		mDatePaint.setTextSize(mDateTextSize);
+		mDatePaint.setAntiAlias(true);
+		mDatePaint.setFakeBoldText(true);
+		mDatePaint.setTextAlign(Paint.Align.CENTER);
 	}
 
 	private void setUpHeader() {
+		mDayLabels = new String[mDaysPerWeek];
+		for (int i = mFirstDayOfWeek, count = mFirstDayOfWeek + mDaysPerWeek; i < count; i++) {
+			int calendarDay = (i > Calendar.SATURDAY) ? i - Calendar.SATURDAY : i;
+			mDayLabels[i - mFirstDayOfWeek] = DateUtils.getDayOfWeekString(calendarDay,
+					DateUtils.LENGTH_SHORTEST);
+		}
 
+		TextView label = (TextView) mHeader.getChildAt(0);
+		if (mShowWeekNumber) {
+			label.setVisibility(View.VISIBLE);
+		} else {
+			label.setVisibility(View.GONE);
+		}
+		for (int i = 1, count = mHeader.getChildCount(); i < count; i++) {
+			label = (TextView) mHeader.getChildAt(i);
+
+			if (i < mDaysPerWeek + 1) {
+				label.setText(mDayLabels[i - 1]);
+				label.setVisibility(View.VISIBLE);
+			} else {
+				label.setVisibility(View.GONE);
+			}
+		}
+		mHeader.invalidate();
 	}
 
+	/**
+	 * Sets up the <code>ListView</code> containing the
+	 * actual calendar.
+	 */
 	private void setUpListView() {
 		mAdapter = new CalendarAdapter();
 		mListView.setAdapter(mAdapter);
 		mListView.setItemsCanFocus(true);
 		mListView.setVerticalScrollBarEnabled(false);
+		mListView.setDividerHeight(0);
+	}
+
+	/**
+	 * This moves to the specified time in the view. If the time is not already
+	 * in range it will move the list so that the first of the month containing
+	 * the time is at the top of the view. If the new time is already in view
+	 * the list will not be scrolled unless forceScroll is true. This time may
+	 * optionally be highlighted as selected as well.
+	 *
+	 * @param date        The time to move to.
+	 * @param animate     Whether to scroll to the given time or just redraw at the
+	 *                    new location.
+	 * @param forceScroll Whether to recenter even if the time is already
+	 *                    visible.
+	 * @throws IllegalArgumentException of the provided date is before the
+	 *                                  range start of after the range end.
+	 */
+	private void goTo(Calendar date, boolean animate, boolean forceScroll) {
+		if (date.before(mMinDate) || date.after(mMaxDate)) {
+			throw new IllegalArgumentException("Time not between " + mMinDate.getTime()
+					+ " and " + mMaxDate.getTime());
+		}
+
+		mFirstDayOfMonth.setTimeInMillis(date.getTimeInMillis());
+		mFirstDayOfMonth.set(Calendar.DAY_OF_MONTH, 1);
+
+		setMonthDisplayed(mFirstDayOfMonth);
+
+		int position;
+
+		// the earliest time we can scroll to is the min date
+		if (mFirstDayOfMonth.before(mMinDate)) {
+			position = 0;
+		} else {
+			position = getWeeksSinceMinDate(mFirstDayOfMonth);
+		}
+		if (animate) {
+			mListView.smoothScrollToPositionFromTop(position, 0,
+					GOTO_SCROLL_DURATION);
+		} else {
+			mListView.setSelection(position);
+		}
+
 	}
 
 	/**
@@ -121,10 +260,26 @@ public class CalendarView extends FrameLayout {
 	}
 
 	/**
+	 * Sets the month displayed at the top of this view based on time. Override
+	 * to add custom events when the title is changed.
+	 *
+	 * @param calendar A day in the new focus month.
+	 */
+	private void setMonthDisplayed(Calendar calendar) {
+		mCurrentMonthDisplayed = calendar.get(Calendar.MONTH);
+		mAdapter.setFocusMonth(mCurrentMonthDisplayed);
+		final long millis = calendar.getTimeInMillis();
+
+		if (mOnFocusMonthChangeListener != null) {
+			mOnFocusMonthChangeListener.onFocusMonthChanged(millis);
+		}
+	}
+
+	/**
 	 * Gets a calendar for locale bootstrapped with the value of a given calendar.
 	 *
 	 * @param oldCalendar The old calendar.
-	 * @param locale The locale.
+	 * @param locale      The locale.
 	 */
 	private Calendar getCalendarForLocale(Calendar oldCalendar, Locale locale) {
 		if (oldCalendar == null) {
@@ -136,7 +291,6 @@ public class CalendarView extends FrameLayout {
 			return newCalendar;
 		}
 	}
-
 
 	/**
 	 * Sets the current locale.
@@ -156,11 +310,46 @@ public class CalendarView extends FrameLayout {
 		mMaxDate = getCalendarForLocale(mMaxDate, locale);
 	}
 
+	/**
+	 * @return Returns the number of weeks between the current <code>date</code>
+	 *         and the <code>mMinDate</code>.
+	 */
+	private int getWeeksSinceMinDate(Calendar date) {
+		if (date.before(mMinDate)) {
+			throw new IllegalArgumentException("fromDate: " + mMinDate.getTime()
+					+ " does not precede toDate: " + date.getTime());
+		}
+		long endTimeMillis = date.getTimeInMillis()
+				+ date.getTimeZone().getOffset(date.getTimeInMillis());
+		long startTimeMillis = mMinDate.getTimeInMillis()
+				+ mMinDate.getTimeZone().getOffset(mMinDate.getTimeInMillis());
+		long dayOffsetMillis = (mMinDate.get(Calendar.DAY_OF_WEEK) - mFirstDayOfWeek)
+				* MILLIS_IN_DAY;
+		return (int) ((endTimeMillis - startTimeMillis + dayOffsetMillis) / MILLIS_IN_WEEK);
+	}
+
+	public void setRowCount(int numberOfRows) {
+		if (numberOfRows <= 0) {
+			throw new IllegalArgumentException("Row count can't be less than 1");
+		}
+
+		for (int i = 0; i < mListView.getChildCount(); i++) {
+			mListView.getChildAt(i).setMinimumHeight(mListView.getChildAt(i).getHeight() * mRows / numberOfRows);
+		}
+		mRows = numberOfRows;
+	}
+
+	public void setOnFocusMonthChangeListener(OnFocusMonthChangeListener onFocusMonthChangeListener) {
+		this.mOnFocusMonthChangeListener = onFocusMonthChangeListener;
+	}
+
 	private class CalendarAdapter extends BaseAdapter {
+
+		private final Calendar mSelectedDate = Calendar.getInstance();
 
 		@Override
 		public int getCount() {
-			return 0;
+			return mListCount;
 		}
 
 		@Override
@@ -170,12 +359,134 @@ public class CalendarView extends FrameLayout {
 
 		@Override
 		public long getItemId(int position) {
-			return 0;
+			return position;
 		}
 
 		@Override
 		public View getView(int position, View convertView, ViewGroup parent) {
-			return null;
+			CalendarRow row = (CalendarRow) convertView;
+
+			if (row == null) {
+				row = new CalendarRow(mContext);
+			}
+
+			row.init(position);
+			return row;
+		}
+
+		/**
+		 * Updates the selected day and related parameters.
+		 *
+		 * @param selectedDay The time to highlight
+		 */
+		public void setSelectedDay(Calendar selectedDay) {
+			if (selectedDay.get(Calendar.DAY_OF_YEAR) == mSelectedDate.get(Calendar.DAY_OF_YEAR)
+					&& selectedDay.get(Calendar.YEAR) == mSelectedDate.get(Calendar.YEAR)) {
+				return;
+			}
+			mSelectedDate.setTimeInMillis(selectedDay.getTimeInMillis());
+			mSelectedWeek = getWeeksSinceMinDate(mSelectedDate);
+			mFocusedMonth = mSelectedDate.get(Calendar.MONTH);
+			notifyDataSetChanged();
+		}
+
+		/**
+		 * Changes which month is in focus and updates the view.
+		 *
+		 * @param month The month to show as in focus [0-11]
+		 */
+		public void setFocusMonth(int month) {
+			if (mFocusedMonth == month) {
+				return;
+			}
+			mFocusedMonth = month;
+			notifyDataSetChanged();
+		}
+	}
+
+	private class CalendarRow extends LinearLayout {
+
+		private TextView mWeekNumber;
+
+		private RowItem[] mRowItems = new RowItem[mDaysPerRow];
+
+		public CalendarRow(Context context) {
+			this(context, null);
+		}
+
+		public CalendarRow(Context context, AttributeSet attrs) {
+			this(context, attrs, 0);
+		}
+
+		public CalendarRow(Context context, AttributeSet attrs, int defStyle) {
+			super(context, attrs, 0);
+			mWeekNumber = new TextView(mContext);
+
+			if (!mShowWeekNumber) {
+				mWeekNumber.setVisibility(INVISIBLE);
+			}
+
+			LinearLayout.LayoutParams weekNumberParams = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
+			addView(mWeekNumber, weekNumberParams);
+
+			for (int i = 0; i < mDaysPerRow; i++) {
+				mRowItems[i] = new RowItem(mContext);
+				LinearLayout.LayoutParams params = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1);
+				addView(mRowItems[i], params);
+			}
+		}
+
+		public void init(int pos) {
+			mTempDate.setTimeInMillis(mMinDate.getTimeInMillis());
+			mTempDate.add(Calendar.DAY_OF_YEAR, pos * mDaysPerRow);
+
+			for (int i = 0; i < mDaysPerRow; i++) {
+				mRowItems[i].init(mTempDate.getTimeInMillis());
+
+				mTempDate.add(Calendar.DAY_OF_MONTH, 1);
+			}
+		}
+
+		private class RowItem extends View {
+
+			private int mDay;
+			private int mMonth;
+			private int mYear;
+
+			public RowItem(Context context) {
+				this(context, null);
+			}
+
+			private RowItem(Context context, AttributeSet attrs) {
+				this(context, attrs, 0);
+			}
+
+			private RowItem(Context context, AttributeSet attrs, int defStyle) {
+				super(context, attrs, defStyle);
+			}
+
+			public void init(long dateInMillis) {
+				mTempDate.setTimeInMillis(dateInMillis);
+
+				mDay = mTempDate.get(Calendar.DAY_OF_MONTH);
+				mMonth = mTempDate.get(Calendar.MONTH);
+				mYear = mTempDate.get(Calendar.YEAR);
+			}
+
+			@Override
+			protected void onDraw(Canvas canvas) {
+				int halfHeight = canvas.getHeight() / 2;
+				int halfWidth = canvas.getWidth() / 2;
+				canvas.drawText(mDay + "", halfWidth, halfHeight, mDatePaint);
+
+			}
+
+			@Override
+			protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+				mRowHeight = (mListView.getHeight() - mListView.getPaddingTop() - mListView
+						.getPaddingBottom()) / mRows;
+				setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), mRowHeight);
+			}
 		}
 	}
 }

@@ -17,9 +17,13 @@ public class MainActivity extends FragmentActivity {
 		LEFT, RIGHT, NIL
 	}
 
-	private static final String LOG_TAG = "Activity";
+	public static final int PAGE_COUNT = 2;
 
-	private static final int NUMBER_OF_PAGES = 3;
+	public static final int PAGE_MONTH = 0;
+
+	public static final int PAGE_WEEK = 1;
+
+	private static final String LOG_TAG = "Activity";
 
 	private TitlePageIndicator mIndicator;
 
@@ -37,7 +41,6 @@ public class MainActivity extends FragmentActivity {
 
 		mViewPager = (ViewPager) findViewById(R.id.pager);
 		mViewPager.setAdapter(adapter);
-		mViewPager.requestDisallowInterceptTouchEvent(true);
 		mViewPager.setOnTouchListener(new View.OnTouchListener() {
 			@Override
 			public boolean onTouch(View v, MotionEvent event) {
@@ -51,13 +54,13 @@ public class MainActivity extends FragmentActivity {
 		mIndicator.setOnPageChangeListener(adapter);
 	}
 
-	private class CalendarPagerAdapter extends FragmentPagerAdapter implements ViewPager.OnPageChangeListener, MonthFragment.OnTitleChangedListener {
+	private class CalendarPagerAdapter extends FragmentPagerAdapter implements ViewPager.OnPageChangeListener, CalendarFragment.OnTitleChangedListener {
 
 		private String mMonthTitle = "month";
 
-		private MonthFragment mMonthFragment;
+		private CalendarFragment mMonthFragment;
 
-		private WeekFragment mWeekFragment;
+		private CalendarFragment mWeekFragment;
 
 		private int mScrollState;
 
@@ -73,31 +76,30 @@ public class MainActivity extends FragmentActivity {
 
 		@Override
 		public Fragment getItem(int i) {
+			CalendarFragment frag = CalendarFragment.newInstance(i);
+
 			switch (i) {
-				case CalendarFragment.PAGE_MONTH:
-					mMonthFragment = MonthFragment.newInstance(i);
-					mMonthFragment.setOnTitleChangedListener(this);
-					return mMonthFragment;
+				case PAGE_MONTH:
+					mMonthFragment = frag;
+					break;
 
-				case CalendarFragment.PAGE_WEEK:
-					mWeekFragment = new WeekFragment();
-					return mWeekFragment;
-
-
+				case PAGE_WEEK:
+					mWeekFragment = frag;
+					break;
 			}
 
-			return MonthFragment.newInstance(i);
+			return frag;
 		}
 
 		@Override
 		public int getCount() {
-			return NUMBER_OF_PAGES;
+			return PAGE_COUNT;
 		}
 
 		@Override
 		public CharSequence getPageTitle(int position) {
 			switch (position) {
-				case CalendarFragment.PAGE_MONTH:
+				case PAGE_MONTH:
 					return mMonthTitle;
 			}
 			return "Hello Month";
@@ -112,37 +114,37 @@ public class MainActivity extends FragmentActivity {
 		@Override
 		public void onPageScrolled(int i, float v, int i2) {
 
-			mDirection = mPreviousScrollAmount < i2 ? Direction.RIGHT : Direction.LEFT;
-			mPreviousScrollAmount = i2;
-			boolean moveRight = mDirection == Direction.RIGHT;
-
-			String state = (mScrollState == ViewPager.SCROLL_STATE_DRAGGING ? "Scroll_State_Dragging" : (mScrollState == ViewPager.SCROLL_STATE_IDLE ? "Scroll_State_Idle" : "Scroll_State_Settling"));
-
-			Log.d(LOG_TAG, "SCROLLED " + state);
-			Log.d(LOG_TAG, "AMOUNT " + v);
-			Log.d(LOG_TAG, "PIXELS " + i2);
-			if (i < CalendarFragment.PAGE_MONTH + 1 && mMonthFragment != null) {
-				mWeekFragment.setShownWeek(mMonthFragment.getFocusedWeekNumber());
-				switch (mScrollState) {
-					case ViewPager.SCROLL_STATE_DRAGGING:
-						if (mPreviousState == ViewPager.SCROLL_STATE_IDLE && moveRight) {
-							mWeekFragment.onAnimationStarted();
-						}
-						mMonthFragment.onPageScrolled(moveRight, i2);
-						mWeekFragment.onPageScrolled(moveRight, i2, mMonthFragment.getFocusedTopOffset());
-						break;
-
-//					case ViewPager.SCROLL_STATE_IDLE:
-//						mMonthFragment.onPageScrolled(false, 0);
-//						mWeekFragment.onPageScrolled(false, i2);
+//			mDirection = mPreviousScrollAmount < i2 ? Direction.RIGHT : Direction.LEFT;
+//			mPreviousScrollAmount = i2;
+//			boolean moveRight = mDirection == Direction.RIGHT;
+//
+//			String state = (mScrollState == ViewPager.SCROLL_STATE_DRAGGING ? "Scroll_State_Dragging" : (mScrollState == ViewPager.SCROLL_STATE_IDLE ? "Scroll_State_Idle" : "Scroll_State_Settling"));
+//
+//			Log.d(LOG_TAG, "SCROLLED " + state);
+//			Log.d(LOG_TAG, "AMOUNT " + v);
+//			Log.d(LOG_TAG, "PIXELS " + i2);
+//			if (i < PAGE_MONTH + 1 && mMonthFragment != null) {
+//				mWeekFragment.setShownWeek(mMonthFragment.getFocusedWeekNumber());
+//				switch (mScrollState) {
+//					case ViewPager.SCROLL_STATE_DRAGGING:
+//						if (mPreviousState == ViewPager.SCROLL_STATE_IDLE && moveRight) {
+//							mWeekFragment.onAnimationStarted();
+//						}
+//						mMonthFragment.onPageScrolled(moveRight, i2);
+//						mWeekFragment.onPageScrolled(moveRight, i2, mMonthFragment.getFocusedTopOffset());
 //						break;
-
-					case ViewPager.SCROLL_STATE_SETTLING:
-						mMonthFragment.onPageScrolled(moveRight, i2);
-						mWeekFragment.onPageScrolled(moveRight, i2, mMonthFragment.getFocusedTopOffset());
-						break;
-				}
-			}
+//
+////					case ViewPager.SCROLL_STATE_IDLE:
+////						mMonthFragment.onPageScrolled(false, 0);
+////						mWeekFragment.onPageScrolled(false, i2);
+////						break;
+//
+//					case ViewPager.SCROLL_STATE_SETTLING:
+//						mMonthFragment.onPageScrolled(moveRight, i2);
+//						mWeekFragment.onPageScrolled(moveRight, i2, mMonthFragment.getFocusedTopOffset());
+//						break;
+//				}
+//			}
 		}
 
 		@Override
@@ -151,32 +153,32 @@ public class MainActivity extends FragmentActivity {
 
 		@Override
 		public void onPageScrollStateChanged(int i) {
-			mPreviousState = mScrollState;
-			mScrollState = i;
-
-			if (mMonthFragment != null) {
-				switch (mScrollState) {
-					case ViewPager.SCROLL_STATE_DRAGGING:
-						break;
-
-					case ViewPager.SCROLL_STATE_IDLE:
-						mDirection = Direction.NIL;
-						mWeekFragment.onAnimationComplete();
-						mWeekFragment.onPageScrolled(false, WeekFragment.VIEW_WIDTH, mMonthFragment.getFocusedTopOffset());
-						mMonthFragment.onPageScrolled(false, 0);
-						break;
-
-//					case ViewPager.SCROLL_STATE_SETTLING:
+//			mPreviousState = mScrollState;
+//			mScrollState = i;
+//
+//			if (mMonthFragment != null) {
+//				switch (mScrollState) {
+//					case ViewPager.SCROLL_STATE_DRAGGING:
+//						break;
+//
+//					case ViewPager.SCROLL_STATE_IDLE:
+//						mDirection = Direction.NIL;
+//						mWeekFragment.onAnimationComplete();
+//						mWeekFragment.onPageScrolled(false, WeekFragment.VIEW_WIDTH, mMonthFragment.getFocusedTopOffset());
 //						mMonthFragment.onPageScrolled(false, 0);
 //						break;
-				}
-			}
+//
+////					case ViewPager.SCROLL_STATE_SETTLING:
+////						mMonthFragment.onPageScrolled(false, 0);
+////						break;
+//				}
+//			}
 		}
 
 		@Override
 		public void onTitleChanged(String newTitle, int page) {
 			switch (page) {
-				case CalendarFragment.PAGE_MONTH:
+				case PAGE_MONTH:
 					setMonthTitle(newTitle);
 					break;
 			}

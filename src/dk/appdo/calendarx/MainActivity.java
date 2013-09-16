@@ -77,6 +77,7 @@ public class MainActivity extends FragmentActivity {
 		@Override
 		public Fragment getItem(int i) {
 			CalendarFragment frag = CalendarFragment.newInstance(i);
+			frag.setOnTitleChangedListener(this);
 
 			switch (i) {
 				case PAGE_MONTH:
@@ -102,7 +103,7 @@ public class MainActivity extends FragmentActivity {
 				case PAGE_MONTH:
 					return mMonthTitle;
 			}
-			return "Hello Month";
+			return "Hello " + position;
 		}
 
 		public void setMonthTitle(String title) {

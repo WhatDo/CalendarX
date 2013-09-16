@@ -149,12 +149,13 @@ public class CalendarView extends FrameLayout {
 
 		setUpHeader();
 		setUpListView();
-
 		setUpPaints();
+	}
 
+	public void init() {
 		mTempDate.setTimeInMillis(System.currentTimeMillis());
-
 		goTo(mTempDate, false);
+		invalidate();
 	}
 
 	private void setUpPaints() {
@@ -170,7 +171,7 @@ public class CalendarView extends FrameLayout {
 		for (int i = mFirstDayOfWeek, count = mFirstDayOfWeek + mDaysPerWeek; i < count; i++) {
 			int calendarDay = (i > Calendar.SATURDAY) ? i - Calendar.SATURDAY : i;
 			mDayLabels[i - mFirstDayOfWeek] = DateUtils.getDayOfWeekString(calendarDay,
-					DateUtils.LENGTH_SHORTEST);
+					DateUtils.LENGTH_SHORT);
 		}
 
 		TextView label = (TextView) mHeader.getChildAt(0);
@@ -269,12 +270,7 @@ public class CalendarView extends FrameLayout {
 	 */
 	private void setMonthDisplayed(Calendar calendar) {
 		mCurrentMonthDisplayed = calendar.get(Calendar.MONTH);
-		mAdapter.setFocusMonth(mCurrentMonthDisplayed);
-		final long millis = calendar.getTimeInMillis();
-
-		if (mOnFocusMonthChangeListener != null) {
-			mOnFocusMonthChangeListener.onFocusMonthChanged(millis);
-		}
+		mAdapter.setFocusMonth(calendar);
 	}
 
 	/**
@@ -395,12 +391,18 @@ public class CalendarView extends FrameLayout {
 		/**
 		 * Changes which month is in focus and updates the view.
 		 *
-		 * @param month The month to show as in focus [0-11]
+		 * @param calendar The calendar containing the month to show as in focus
 		 */
-		public void setFocusMonth(int month) {
+		public void setFocusMonth(Calendar calendar) {
+			int month = calendar.get(Calendar.MONTH);
 			if (mFocusedMonth != month) {
 				mFocusedMonth = month;
 				notifyDataSetChanged();
+				final long millis = calendar.getTimeInMillis();
+
+				if (mOnFocusMonthChangeListener != null) {
+					mOnFocusMonthChangeListener.onFocusMonthChanged(millis);
+				}
 			}
 		}
 	}

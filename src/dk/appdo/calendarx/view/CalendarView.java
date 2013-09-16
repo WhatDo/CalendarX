@@ -151,6 +151,10 @@ public class CalendarView extends FrameLayout {
 		setUpListView();
 
 		setUpPaints();
+
+		mTempDate.setTimeInMillis(System.currentTimeMillis());
+
+		goTo(mTempDate, false);
 	}
 
 	private void setUpPaints() {
@@ -210,12 +214,10 @@ public class CalendarView extends FrameLayout {
 	 * @param date        The time to move to.
 	 * @param animate     Whether to scroll to the given time or just redraw at the
 	 *                    new location.
-	 * @param forceScroll Whether to recenter even if the time is already
-	 *                    visible.
 	 * @throws IllegalArgumentException of the provided date is before the
 	 *                                  range start of after the range end.
 	 */
-	private void goTo(Calendar date, boolean animate, boolean forceScroll) {
+	private void goTo(Calendar date, boolean animate) {
 		if (date.before(mMinDate) || date.after(mMaxDate)) {
 			throw new IllegalArgumentException("Time not between " + mMinDate.getTime()
 					+ " and " + mMaxDate.getTime());
@@ -396,11 +398,10 @@ public class CalendarView extends FrameLayout {
 		 * @param month The month to show as in focus [0-11]
 		 */
 		public void setFocusMonth(int month) {
-			if (mFocusedMonth == month) {
-				return;
+			if (mFocusedMonth != month) {
+				mFocusedMonth = month;
+				notifyDataSetChanged();
 			}
-			mFocusedMonth = month;
-			notifyDataSetChanged();
 		}
 	}
 

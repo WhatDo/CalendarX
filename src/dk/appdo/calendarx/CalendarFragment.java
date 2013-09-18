@@ -69,14 +69,11 @@ public class CalendarFragment extends Fragment implements CalendarView.OnFocusMo
 
 	@Override
 	public void onFocusMonthChanged(long newTimeInMillis) {
-		Log.d(LOG_TAG, "CHANGING TITLE TO " + newTimeInMillis);
 		if (mOnTitleChangedListener != null) {
 			final int flags = DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_NO_MONTH_DAY
 					| DateUtils.FORMAT_SHOW_YEAR;
 
 			String newMonthName = DateUtils.formatDateRange(getActivity(), newTimeInMillis, newTimeInMillis, flags);
-
-			Log.d(LOG_TAG, "CHANGING TITLE TO " + newMonthName);
 
 			mOnTitleChangedListener.onTitleChanged(newMonthName, mType);
 		}

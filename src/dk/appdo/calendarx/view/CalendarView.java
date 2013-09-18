@@ -6,6 +6,7 @@ import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.preference.PreferenceManager;
 import android.text.format.DateUtils;
 import android.util.AttributeSet;
@@ -59,16 +60,20 @@ public class CalendarView extends FrameLayout {
 
 	private static final boolean DEFAULT_SHOW_WEEK_NUMBERS = false;
 
-	private Paint mDatePaint;
-
-	private Rect mTempRect;
-
 	private final Context mContext;
 
 	private OnFocusMonthChangeListener mOnFocusMonthChangeListener;
 
-	private final int mDateTextSize;
+	// For drawing the dates
+	private Paint mDatePaint;
 
+	private Paint mDateBGPaint;
+
+	private int mBackgroundColor;
+
+	private RectF mTempRect;
+
+	// To control the calendar
 	private Calendar mMaxDate;
 
 	private Calendar mMinDate;
@@ -81,33 +86,38 @@ public class CalendarView extends FrameLayout {
 
 	private Locale mCurrentLocale;
 
-	private final ListView mListView;
-
-	private final ViewGroup mHeader;
-
-	private CalendarAdapter mAdapter;
-
-	private boolean mShowWeekNumber = DEFAULT_SHOW_WEEK_NUMBERS;
-
-	private int mDaysPerWeek = DEFAULT_DAYS_PER_WEEK;
-
 	private int mCurrentMonthDisplayed;
 
 	private int mSelectedWeek;
 
 	private int mFocusedMonth;
 
+	// Views
+	private final ListView mListView;
+
+	private final ViewGroup mHeader;
+
+	private CalendarAdapter mAdapter;
+
 	private int mListCount;
 
+	private int mRows;
+
+	private int mRowHeight;
+
 	private String[] mDayLabels;
+
+	// Styles
+	private boolean mShowWeekNumber = DEFAULT_SHOW_WEEK_NUMBERS;
+
+	private final int mDateTextSize;
+
+	private int mDaysPerWeek = DEFAULT_DAYS_PER_WEEK;
 
 	private int mFirstDayOfWeek = DEFAULT_FIRST_DAY_OF_WEEK;
 
 	private int mDaysPerRow = DEFAULT_DAYS_PER_WEEK;
 
-	private int mRows;
-
-	private int mRowHeight;
 
 	public CalendarView(Context context) {
 		this(context, null);
@@ -137,7 +147,11 @@ public class CalendarView extends FrameLayout {
 
 		mListCount = getWeeksSinceMinDate(mMaxDate);
 
+		mBackgroundColor = getResources().getColor(android.R.color.background_dark);
+
 		t.recycle();
+
+		mTempRect = new RectF();
 
 		LayoutInflater inflater = (LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 		View content = inflater.inflate(R.layout.calendar_view, null, false);
@@ -152,20 +166,32 @@ public class CalendarView extends FrameLayout {
 		setUpPaints();
 	}
 
+	/**
+	 * Inits the view to go to today
+	 */
 	public void init() {
 		mTempDate.setTimeInMillis(System.currentTimeMillis());
 		goTo(mTempDate, false);
 		invalidate();
 	}
 
+	/**
+	 * Sets up the paints used by <code>RowItem</code>
+	 */
 	private void setUpPaints() {
 		mDatePaint = new Paint();
 		mDatePaint.setTextSize(mDateTextSize);
 		mDatePaint.setAntiAlias(true);
 		mDatePaint.setFakeBoldText(true);
 		mDatePaint.setTextAlign(Paint.Align.CENTER);
+
+		mDateBGPaint = new Paint();
+		mDateBGPaint.setColor(mBackgroundColor);
 	}
 
+	/**
+	 * Sets up the week strings in the header
+	 */
 	private void setUpHeader() {
 		mDayLabels = new String[mDaysPerWeek];
 		for (int i = mFirstDayOfWeek, count = mFirstDayOfWeek + mDaysPerWeek; i < count; i++) {
@@ -409,6 +435,10 @@ public class CalendarView extends FrameLayout {
 
 	private class CalendarRow extends LinearLayout {
 
+		private int mDrawHeight;
+
+		private int mDrawY;
+
 		private TextView mWeekNumber;
 
 		private RowItem[] mRowItems = new RowItem[mDaysPerRow];
@@ -450,6 +480,14 @@ public class CalendarView extends FrameLayout {
 			}
 		}
 
+		public void setDrawHeight(int height) {
+			mDrawHeight = height;
+		}
+
+		public void setDrawY(int y) {
+			mDrawY = y;
+		}
+
 		private class RowItem extends View {
 
 			private int mDay;
@@ -478,8 +516,14 @@ public class CalendarView extends FrameLayout {
 
 			@Override
 			protected void onDraw(Canvas canvas) {
+
+				// Our point zero
 				int halfHeight = canvas.getHeight() / 2;
 				int halfWidth = canvas.getWidth() / 2;
+
+				mTempRect.set(0, halfHeight + mDrawHeight / 2, canvas.getWidth(), halfHeight - mDrawHeight / 2);
+				canvas.drawRect(mTempRect, mDateBGPaint);
+
 				canvas.drawText(mDay + "", halfWidth, halfHeight, mDatePaint);
 
 			}
@@ -489,6 +533,8 @@ public class CalendarView extends FrameLayout {
 				mRowHeight = (mListView.getHeight() - mListView.getPaddingTop() - mListView
 						.getPaddingBottom()) / mRows;
 				setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), mRowHeight);
+
+				mDrawHeight = mRowHeight;
 			}
 		}
 	}

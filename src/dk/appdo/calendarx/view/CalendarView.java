@@ -3,10 +3,7 @@ package dk.appdo.calendarx.view;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.TypedArray;
-import android.graphics.Canvas;
-import android.graphics.Paint;
-import android.graphics.Rect;
-import android.graphics.RectF;
+import android.graphics.*;
 import android.preference.PreferenceManager;
 import android.text.format.DateUtils;
 import android.util.AttributeSet;
@@ -27,6 +24,10 @@ public class CalendarView extends FrameLayout {
 
 	public interface OnFocusMonthChangeListener {
 		void onFocusMonthChanged(long newTimeInMillis);
+	}
+
+	public enum SnapMode {
+		Month, Week, None
 	}
 
 	private static final String LOG_TAG = "CalendarView";
@@ -69,9 +70,15 @@ public class CalendarView extends FrameLayout {
 
 	private Paint mDateBGPaint;
 
+	private Paint mFocusedMonthPaint;
+
 	private int mBackgroundColor;
 
+	private int mFocusedMonthColor;
+
 	private RectF mTempRect;
+
+	private int mDateTextHeight;
 
 	// To control the calendar
 	private Calendar mMaxDate;
@@ -92,6 +99,8 @@ public class CalendarView extends FrameLayout {
 
 	private int mFocusedMonth;
 
+	private int mFirstDayOfWeek = DEFAULT_FIRST_DAY_OF_WEEK;
+
 	// Views
 	private final ListView mListView;
 
@@ -110,11 +119,11 @@ public class CalendarView extends FrameLayout {
 	// Styles
 	private boolean mShowWeekNumber = DEFAULT_SHOW_WEEK_NUMBERS;
 
+	private SnapMode mSnapMode = SnapMode.None;
+
 	private final int mDateTextSize;
 
 	private int mDaysPerWeek = DEFAULT_DAYS_PER_WEEK;
-
-	private int mFirstDayOfWeek = DEFAULT_FIRST_DAY_OF_WEEK;
 
 	private int mDaysPerRow = DEFAULT_DAYS_PER_WEEK;
 
@@ -141,13 +150,15 @@ public class CalendarView extends FrameLayout {
 
 		mDateTextSize = t.getDimensionPixelSize(0, 1);
 
-		mFirstDayOfWeek = preferences.getInt("firstDayOfWeek", DEFAULT_DAYS_PER_WEEK);
+		mFirstDayOfWeek = preferences.getInt("firstDayOfWeek", DEFAULT_FIRST_DAY_OF_WEEK);
 
 		mRows = DEFAULT_SHOWN_ROWS_COUNT;
 
 		mListCount = getWeeksSinceMinDate(mMaxDate);
 
-		mBackgroundColor = getResources().getColor(android.R.color.background_dark);
+		mBackgroundColor = getResources().getColor(R.color.background_grey);
+
+		mFocusedMonthColor = getResources().getColor(R.color.foreground_grey);
 
 		t.recycle();
 
@@ -183,10 +194,17 @@ public class CalendarView extends FrameLayout {
 		mDatePaint.setTextSize(mDateTextSize);
 		mDatePaint.setAntiAlias(true);
 		mDatePaint.setFakeBoldText(true);
+		mDatePaint.setColor(Color.WHITE);
 		mDatePaint.setTextAlign(Paint.Align.CENTER);
+		Rect bounds = new Rect();
+		mDatePaint.getTextBounds("123", 0, 3, bounds);
+		mDateTextHeight = bounds.height();
 
 		mDateBGPaint = new Paint();
 		mDateBGPaint.setColor(mBackgroundColor);
+
+		mFocusedMonthPaint = new Paint();
+		mFocusedMonthPaint.setColor(mFocusedMonthColor);
 	}
 
 	/**
@@ -224,11 +242,12 @@ public class CalendarView extends FrameLayout {
 	 * actual calendar.
 	 */
 	private void setUpListView() {
-		mAdapter = new CalendarAdapter();
-		mListView.setAdapter(mAdapter);
 		mListView.setItemsCanFocus(true);
 		mListView.setVerticalScrollBarEnabled(false);
 		mListView.setDividerHeight(0);
+		mAdapter = new CalendarAdapter();
+		mListView.setAdapter(mAdapter);
+		mListView.setOnScrollListener(mAdapter);
 	}
 
 	/**
@@ -238,9 +257,9 @@ public class CalendarView extends FrameLayout {
 	 * the list will not be scrolled unless forceScroll is true. This time may
 	 * optionally be highlighted as selected as well.
 	 *
-	 * @param date        The time to move to.
-	 * @param animate     Whether to scroll to the given time or just redraw at the
-	 *                    new location.
+	 * @param date    The time to move to.
+	 * @param animate Whether to scroll to the given time or just redraw at the
+	 *                new location.
 	 * @throws IllegalArgumentException of the provided date is before the
 	 *                                  range start of after the range end.
 	 */
@@ -367,7 +386,7 @@ public class CalendarView extends FrameLayout {
 		this.mOnFocusMonthChangeListener = onFocusMonthChangeListener;
 	}
 
-	private class CalendarAdapter extends BaseAdapter {
+	private class CalendarAdapter extends BaseAdapter implements AbsListView.OnScrollListener {
 
 		private final Calendar mSelectedDate = Calendar.getInstance();
 
@@ -430,6 +449,24 @@ public class CalendarView extends FrameLayout {
 					mOnFocusMonthChangeListener.onFocusMonthChanged(millis);
 				}
 			}
+		}
+
+		@Override
+		public void onScrollStateChanged(AbsListView view, int scrollState) {
+
+		}
+
+		@Override
+		public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
+			switch (mSnapMode) {
+				case Month:
+					break;
+				case Week:
+					break;
+				case None:
+					break;
+			}
+
 		}
 	}
 
@@ -516,15 +553,23 @@ public class CalendarView extends FrameLayout {
 
 			@Override
 			protected void onDraw(Canvas canvas) {
+				// Clear
+				canvas.drawColor(mBackgroundColor);
 
-				// Our point zero
+				// ( 0, 0 ) in local coords
 				int halfHeight = canvas.getHeight() / 2;
 				int halfWidth = canvas.getWidth() / 2;
 
-				mTempRect.set(0, halfHeight + mDrawHeight / 2, canvas.getWidth(), halfHeight - mDrawHeight / 2);
-				canvas.drawRect(mTempRect, mDateBGPaint);
+				// Rect to draw to
+				Log.d(LOG_TAG, "TOP " + (halfHeight - mDrawHeight / 2) + " BOTTOM " + (halfHeight + mDrawHeight / 2));
+				mTempRect.set(0, halfHeight - mDrawHeight / 2, canvas.getWidth(), halfHeight + mDrawHeight / 2);
+				//canvas.drawRect(mTempRect, mDateBGPaint);
+				if (mFirstDayOfMonth.get(Calendar.MONTH) == mMonth) {
+					canvas.drawRect(mTempRect, mFocusedMonthPaint);
+				}
 
-				canvas.drawText(mDay + "", halfWidth, halfHeight, mDatePaint);
+
+				canvas.drawText(mDay + "", halfWidth, halfHeight + mDateTextHeight / 2, mDatePaint);
 
 			}
 

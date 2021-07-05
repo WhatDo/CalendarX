@@ -1,0 +1,7 @@
+<resources>
+
+    <style name="Theme" />
+    <style name="Theme.CalendarX" parent="Theme.MaterialComponents.DayNight">
+    </style>
+
+</resources>

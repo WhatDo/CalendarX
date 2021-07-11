@@ -2,6 +2,11 @@
 
     <style name="Theme" />
     <style name="Theme.CalendarX" parent="Theme.MaterialComponents.DayNight">
+        <item name="colorPrimary">#8e24aa</item>
+        <item name="colorSecondary">#ff9100</item>
+        <item name="colorPrimaryDark">#5c007a</item>
+        <item name="colorOnPrimary">#ffffff</item>
+        <item name="colorOnSecondary">#000000</item>
     </style>
 
 </resources>
